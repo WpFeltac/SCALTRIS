@@ -1,6 +1,9 @@
 package app
 
+import app.Direction.{LEFT, NONE, RIGHT}
 import app.ShapeSignature.SQUARE
+import javafx.scene.input.KeyCode
+import javafx.scene.input.KeyEvent
 import scalafx.animation.Timeline.Indefinite
 import scalafx.animation.{KeyFrame, Timeline}
 import scalafx.application.JFXApp3
@@ -26,6 +29,7 @@ object Main extends JFXApp3 {
             Shape(Coord(Random.nextInt(gridBound), 0), SQUARE, Color.rgb(Random.nextInt(256), Random.nextInt(256), Random.nextInt(256)))
         }
 
+        val direction: ObjectProperty[Direction] = ObjectProperty(NONE)
         val game: ObjectProperty[Game] = ObjectProperty(Game(shapeList, Map(), cellSize, gridBound))
 
         stage = new PrimaryStage {
@@ -38,17 +42,34 @@ object Main extends JFXApp3 {
                 game.onChange {
                     content = game.value.draw()
                 }
+                onKeyPressed = moveShapeHorizontally(direction, _)
+                onKeyReleased = resetDirection(direction, _)
             }
         }
 
         new Timeline {
             keyFrames = List(
                 KeyFrame(
-                    time = Duration(500),
-                    onFinished = _ => game.update(game.value.play())
+                    time = Duration(200),
+                    onFinished = _ => game.update(game.value.play(direction.value))
                 )
             )
             cycleCount = Indefinite
         }.play()
+    }
+
+    private def moveShapeHorizontally(direction: ObjectProperty[Direction], key: KeyEvent): Unit = {
+        key.getCode match {
+            case KeyCode.UP => ()
+            case KeyCode.DOWN  => ()
+            case KeyCode.LEFT  => direction.update(LEFT)
+            case KeyCode.RIGHT => direction.update(RIGHT)
+            case _     => ()
+        }
+    }
+
+    private def resetDirection(direction: ObjectProperty[Direction], key: KeyEvent): Unit = {
+        direction.update(NONE)
+        println("Reset")
     }
 }

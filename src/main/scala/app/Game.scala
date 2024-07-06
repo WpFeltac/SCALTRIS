@@ -2,6 +2,7 @@ package app
 
 import app.Main.gridBound
 import app.ShapeSignature.{DOT, SQUARE}
+import javafx.scene.input.KeyEvent
 import scalafx.scene.shape.Rectangle
 import scalafx.scene.paint.Color
 import scalafx.scene.paint.Color.*
@@ -64,7 +65,7 @@ final case class Game(shapeList: List[Shape], shapeMap: Map[(Int, Int), Boolean]
         drawList.flatten :+ Rectangle(0, 600, 600, 60)
     }
 
-    def play(): Game = {
+    def play(direction: Direction): Game = {
         val movingShape = shapeList.last
 
         val isNextMoveBlocked = movingShape.signature match
@@ -86,7 +87,13 @@ final case class Game(shapeList: List[Shape], shapeMap: Map[(Int, Int), Boolean]
             )
         }
         else {
-            copy(shapeList = shapeList.filterNot(s => s == movingShape) :+ Shape(Coord(movingShape.position.x, movingShape.position.y + 1), movingShape.signature, movingShape.color))
+            // TODO : gérer les collisions latérales
+            val newShapeX = direction match
+                case Direction.LEFT => movingShape.position.x - 1
+                case Direction.RIGHT => movingShape.position.x + 1
+                case Direction.NONE => movingShape.position.x
+
+            copy(shapeList = shapeList.filterNot(s => s == movingShape) :+ Shape(Coord(newShapeX, movingShape.position.y + 1), movingShape.signature, movingShape.color))
         }
     }
 }
