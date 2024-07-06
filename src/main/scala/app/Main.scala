@@ -1,7 +1,7 @@
 package app
 
 import app.Direction.{LEFT, NONE, RIGHT}
-import app.ShapeSignature.{SQUARE, T}
+import app.ShapeSignature.{BAR, SQUARE, T}
 import javafx.scene.input.KeyCode
 import javafx.scene.input.KeyEvent
 import scalafx.animation.Timeline.Indefinite
@@ -23,10 +23,19 @@ object Main extends JFXApp3 {
 
     private val gridBound = windowSize / cellSize
 
+    private val TEST_MODE = true
+
     override def start(): Unit = {
 
         val direction: ObjectProperty[Direction] = ObjectProperty(NONE)
-        val game: ObjectProperty[Game] = ObjectProperty(Game(ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)), List(), Map(), cellSize, gridBound))
+        val game: ObjectProperty[Game] = ObjectProperty(Game(
+            if(!TEST_MODE) ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)) else BAR,
+            List(),
+            Map(),
+            cellSize,
+            gridBound,
+            TEST_MODE
+        ))
 
         stage = new PrimaryStage {
             title = "SCALTRIS - Tetris with ScalaFX"

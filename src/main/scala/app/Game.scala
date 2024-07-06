@@ -1,6 +1,7 @@
 package app
 
-import app.ShapeSignature.{BAR, DOT, L, REVERSE_L, S, SQUARE, T}
+import app.Main.TEST_MODE
+import app.ShapeSignature.{BAR, L, REVERSE_L, S, SQUARE, T}
 import scalafx.scene.shape.Rectangle
 import scalafx.scene.paint.Color
 import scalafx.scene.paint.Color.*
@@ -8,7 +9,7 @@ import scalafx.scene.paint.Color.*
 import scala.annotation.tailrec
 import scala.util.Random
 
-final case class Game(signature: ShapeSignature, movingList: List[Pixel], pixelMap: Map[(Int, Int), Pixel], cellSize: Int, gridBound: Int) {
+final case class Game(signature: ShapeSignature, movingList: List[Pixel], pixelMap: Map[(Int, Int), Pixel], cellSize: Int, gridBound: Int, TEST_MODE: Boolean) {
     def draw(): List[Rectangle] = {
 
         val drawMovingList = movingList.map(m =>
@@ -46,10 +47,6 @@ final case class Game(signature: ShapeSignature, movingList: List[Pixel], pixelM
         val randColor = Color.rgb(Random.nextInt(256), Random.nextInt(256), Random.nextInt(256))
 
         val movingPixels = if(movingList.nonEmpty) movingList else signature match
-            case DOT =>
-                List(
-                    Pixel(randCoord, randColor)
-                )
             case SQUARE =>
                 List(
                     // BL
@@ -114,7 +111,7 @@ final case class Game(signature: ShapeSignature, movingList: List[Pixel], pixelM
                     // B
                     Pixel(Coord(randCoord.x + 1, randCoord.y + 2), randColor),
                 )
-        
+
         val isNextMoveBlocked =
             movingPixels.exists(p =>
                 p._1._2 + 1 >= gridBound ||
@@ -123,14 +120,39 @@ final case class Game(signature: ShapeSignature, movingList: List[Pixel], pixelM
 
         // Moving shape will stop and we generate a new falling one
         if(isNextMoveBlocked) {
-            copy(
-                signature = ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)),
-                movingList = List(),
-                pixelMap = addPixelsToMap(pixelMap, movingPixels.map(p => ((p.position.x, p.position.y), p)), 0)
+
+            val postMovePixelMap = addPixelsToMap(pixelMap, movingPixels.map(p => ((p.position.x, p.position.y), p)), 0)
+
+            // Vérification ligne
+            val fullLineCounters = (1 to 19).map(i =>
+                postMovePixelMap.count(m => m._1._2 == i)
             )
+
+            if(fullLineCounters.contains(19)) {
+                val fullLineY = fullLineCounters.indexOf(19) + 1
+
+                println("Full line at " + fullLineY + " !")
+
+                val postLinePixelMap = postMovePixelMap.filterNot(p => p._1._2 >= fullLineY).map(p =>
+                    ((p._1._1, p._1._2 + 1), p._2.copy(position = Coord(p._2.position.x, p._2.position.y + 1)))
+                )
+
+                copy(
+                    signature = if(!TEST_MODE) ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)) else BAR,
+                    movingList = List(),
+                    pixelMap = postLinePixelMap
+                )
+            }
+            else {
+                copy(
+                    signature = if(!TEST_MODE) ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)) else BAR,
+                    movingList = List(),
+                    pixelMap = postMovePixelMap
+                )
+            }
         }
         else {
-
+            // Déplacement latéral
             val isLeftMoveBlocked =
                 movingPixels.exists(p =>
                     p._1._1 - 1 <= 0 ||
