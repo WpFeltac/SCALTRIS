@@ -1,8 +1,6 @@
 package app
 
-import app.Main.gridBound
-import app.ShapeSignature.{DOT, SQUARE}
-import javafx.scene.input.KeyEvent
+import app.ShapeSignature.{BAR, DOT, L, REVERSE_L, S, SQUARE, T}
 import scalafx.scene.shape.Rectangle
 import scalafx.scene.paint.Color
 import scalafx.scene.paint.Color.*
@@ -47,7 +45,7 @@ final case class Game(signature: ShapeSignature, movingList: List[Pixel], pixelM
         val randCoord = Coord(10, 0)
         val randColor = Color.rgb(Random.nextInt(256), Random.nextInt(256), Random.nextInt(256))
 
-        val movingPixels = if(movingList.length > 0) movingList else signature match
+        val movingPixels = if(movingList.nonEmpty) movingList else signature match
             case DOT =>
                 List(
                     Pixel(randCoord, randColor)
@@ -63,7 +61,60 @@ final case class Game(signature: ShapeSignature, movingList: List[Pixel], pixelM
                     // BR
                     Pixel(Coord(randCoord.x + 1, randCoord.y + 1), randColor)
                 )
-
+            case T =>
+                List(
+                    // TL
+                    Pixel(Coord(randCoord.x - 1, randCoord.y), randColor),
+                    // TM
+                    Pixel(Coord(randCoord.x, randCoord.y), randColor),
+                    // TR
+                    Pixel(Coord(randCoord.x + 1, randCoord.y), randColor),
+                    // M
+                    Pixel(Coord(randCoord.x, randCoord.y + 1), randColor),
+                )
+            case L =>
+                List(
+                    // TM
+                    Pixel(Coord(randCoord.x, randCoord.y), randColor),
+                    // M
+                    Pixel(Coord(randCoord.x, randCoord.y + 1), randColor),
+                    // BM
+                    Pixel(Coord(randCoord.x, randCoord.y + 2), randColor),
+                    // BR
+                    Pixel(Coord(randCoord.x + 1, randCoord.y + 2), randColor),
+                )
+            case REVERSE_L =>
+                List(
+                    // TM
+                    Pixel(Coord(randCoord.x, randCoord.y), randColor),
+                    // M
+                    Pixel(Coord(randCoord.x, randCoord.y + 1), randColor),
+                    // BM
+                    Pixel(Coord(randCoord.x, randCoord.y + 2), randColor),
+                    // BL
+                    Pixel(Coord(randCoord.x - 1, randCoord.y + 2), randColor),
+                )
+            case BAR =>
+                List(
+                    // TM
+                    Pixel(Coord(randCoord.x, randCoord.y), randColor),
+                    // M
+                    Pixel(Coord(randCoord.x, randCoord.y + 1), randColor),
+                    // BM
+                    Pixel(Coord(randCoord.x, randCoord.y + 2), randColor),
+                )
+            case S =>
+                List(
+                    // T
+                    Pixel(Coord(randCoord.x, randCoord.y), randColor),
+                    // ML
+                    Pixel(Coord(randCoord.x, randCoord.y + 1), randColor),
+                    // MR
+                    Pixel(Coord(randCoord.x + 1, randCoord.y + 1), randColor),
+                    // B
+                    Pixel(Coord(randCoord.x + 1, randCoord.y + 2), randColor),
+                )
+        
         val isNextMoveBlocked =
             movingPixels.exists(p =>
                 p._1._2 + 1 >= gridBound ||
@@ -73,7 +124,7 @@ final case class Game(signature: ShapeSignature, movingList: List[Pixel], pixelM
         // Moving shape will stop and we generate a new falling one
         if(isNextMoveBlocked) {
             copy(
-                signature = SQUARE,
+                signature = ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)),
                 movingList = List(),
                 pixelMap = addPixelsToMap(pixelMap, movingPixels.map(p => ((p.position.x, p.position.y), p)), 0)
             )

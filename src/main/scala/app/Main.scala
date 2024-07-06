@@ -1,7 +1,7 @@
 package app
 
 import app.Direction.{LEFT, NONE, RIGHT}
-import app.ShapeSignature.SQUARE
+import app.ShapeSignature.{SQUARE, T}
 import javafx.scene.input.KeyCode
 import javafx.scene.input.KeyEvent
 import scalafx.animation.Timeline.Indefinite
@@ -26,7 +26,7 @@ object Main extends JFXApp3 {
     override def start(): Unit = {
 
         val direction: ObjectProperty[Direction] = ObjectProperty(NONE)
-        val game: ObjectProperty[Game] = ObjectProperty(Game(SQUARE, List(), Map(), cellSize, gridBound))
+        val game: ObjectProperty[Game] = ObjectProperty(Game(ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)), List(), Map(), cellSize, gridBound))
 
         stage = new PrimaryStage {
             title = "SCALTRIS - Tetris with ScalaFX"
@@ -66,6 +66,5 @@ object Main extends JFXApp3 {
 
     private def resetDirection(direction: ObjectProperty[Direction], key: KeyEvent): Unit = {
         direction.update(NONE)
-        println("Reset")
     }
 }
