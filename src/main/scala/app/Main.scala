@@ -25,16 +25,12 @@ object Main extends JFXApp3 {
 
     override def start(): Unit = {
 
-        val shapeList = List.fill(1) {
-            Shape(Coord(Random.nextInt(gridBound), 0), SQUARE, Color.rgb(Random.nextInt(256), Random.nextInt(256), Random.nextInt(256)))
-        }
-
         val direction: ObjectProperty[Direction] = ObjectProperty(NONE)
-        val game: ObjectProperty[Game] = ObjectProperty(Game(shapeList, Map(), cellSize, gridBound))
+        val game: ObjectProperty[Game] = ObjectProperty(Game(SQUARE, List(), Map(), cellSize, gridBound))
 
         stage = new PrimaryStage {
             title = "SCALTRIS - Tetris with ScalaFX"
-            width = windowSize
+            width = windowSize + 45
             height = windowSize + cellSize + 60
             scene = new Scene {
                 fill = White
