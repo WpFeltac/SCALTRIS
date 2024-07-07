@@ -23,7 +23,7 @@ object Main extends JFXApp3 {
 
     private val gridBound = windowSize / cellSize
 
-    private val TEST_MODE = true
+    private val TEST_MODE = false
 
     override def start(): Unit = {
 

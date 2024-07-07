@@ -24,8 +24,8 @@ final case class Game(signature: ShapeSignature, movingList: List[Pixel], pixelM
 
         val pixelList = pixelMap.map(p =>
             new Rectangle {
-                x = p._2.position.x * cellSize
-                y = p._2.position.y * cellSize
+                x = p._1._1 * cellSize
+                y = p._1._2 * cellSize
                 width = cellSize
                 height = cellSize
                 fill = p._2.color
@@ -131,11 +131,7 @@ final case class Game(signature: ShapeSignature, movingList: List[Pixel], pixelM
             if(fullLineCounters.contains(19)) {
                 val fullLineY = fullLineCounters.indexOf(19) + 1
 
-                println("Full line at " + fullLineY + " !")
-
-                val postLinePixelMap = postMovePixelMap.filterNot(p => p._1._2 >= fullLineY).map(p =>
-                    ((p._1._1, p._1._2 + 1), p._2.copy(position = Coord(p._2.position.x, p._2.position.y + 1)))
-                )
+                val postLinePixelMap = postMovePixelMap.filterNot(p => p._1._2 == fullLineY)
 
                 copy(
                     signature = if(!TEST_MODE) ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)) else BAR,
@@ -152,6 +148,7 @@ final case class Game(signature: ShapeSignature, movingList: List[Pixel], pixelM
             }
         }
         else {
+            // MOVING PIXELS
             // Déplacement latéral
             val isLeftMoveBlocked =
                 movingPixels.exists(p =>
@@ -170,7 +167,14 @@ final case class Game(signature: ShapeSignature, movingList: List[Pixel], pixelM
                 case Direction.RIGHT => if(!isRightMoveBlocked) 1 else 0
                 case Direction.NONE => 0
 
-            copy(movingList = movingPixels.map(p => p.copy(position = Coord(p.position.x + xCoeff, p.position.y + 1))))
+            // PIXEL MAP
+            // Check if place under us is empty
+            val updatedPixelMap = updatePixelMap(pixelMap, 0)
+
+            copy(
+                pixelMap = updatedPixelMap,
+                movingList = movingPixels.map(p => p.copy(position = Coord(p.position.x + xCoeff, p.position.y + 1)))
+            )
         }
     }
 
@@ -179,6 +183,23 @@ final case class Game(signature: ShapeSignature, movingList: List[Pixel], pixelM
         if(addIndex < toAddList.length) {
             val newPixel = toAddList(addIndex)
             addPixelsToMap(pixelMap.updated(newPixel._1, newPixel._2), toAddList, addIndex + 1)
+        }
+        else {
+            pixelMap
+        }
+    }
+
+    private def updatePixelMap(pixelMap: Map[(Int, Int), Pixel], mapIndex: Int): Map[(Int, Int), Pixel] = {
+        val mapList = pixelMap.toList
+        if(mapIndex < mapList.length) {
+            val currentPixel = mapList(mapIndex)
+            val isBottomCellFree = currentPixel._1._2 < 19 &&
+              !pixelMap.contains((currentPixel._1._1, currentPixel._1._2 + 1))
+
+            updatePixelMap(
+                if(isBottomCellFree) pixelMap.updated((currentPixel._1._1, currentPixel._1._2 + 1), currentPixel._2).removed((currentPixel._1._1, currentPixel._1._2)) else pixelMap,
+                mapIndex + 1
+            )
         }
         else {
             pixelMap
