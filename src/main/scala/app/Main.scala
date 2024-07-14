@@ -23,14 +23,13 @@ object Main extends JFXApp3 {
 
     private val gridBound = windowSize / cellSize
 
-    private val TEST_MODE = false
+    private val TEST_MODE = true
 
     override def start(): Unit = {
 
         val direction: ObjectProperty[Direction] = ObjectProperty(NONE)
         val game: ObjectProperty[Game] = ObjectProperty(Game(
             if(!TEST_MODE) ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)) else BAR,
-            List(),
             Map(),
             cellSize,
             gridBound,
