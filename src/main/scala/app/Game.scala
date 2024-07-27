@@ -10,20 +10,20 @@ import scalafx.scene.paint.Color.*
 import scala.annotation.tailrec
 import scala.util.Random
 
-final case class Game(signature: ShapeSignature, pixelMap: Map[(Int, Int), Pixel], cellSize: Int, gridBound: Int, TEST_MODE: Boolean) {
+final case class Game(signature: ShapeSignature, pixelMap: Map[(Int, Int), (Color, PixelState)], shapeList: List[Shape], cellSize: Int, gridBound: Int, TEST_MODE: Boolean) {
     def draw(): List[Rectangle] = {
 
-        val pixelList = pixelMap.map(p =>
+        val drawList = pixelMap.map(p =>
             new Rectangle {
                 x = p._1._1 * cellSize
                 y = p._1._2 * cellSize
                 width = cellSize
                 height = cellSize
-                fill = p._2.color
+                fill = p._2._1
             }
         ).toList
 
-        pixelList
+        drawList
           // BASE
           :+ Rectangle(0, 600, 630, 60)
           // BANDE GAUCHE
@@ -34,40 +34,48 @@ final case class Game(signature: ShapeSignature, pixelMap: Map[(Int, Int), Pixel
 
     def play(direction: Direction): Game = {
 
-        val newShapeMap = getNextMapWithShape(pixelMap)
-        println(newShapeMap)
+        val nextShape = getNextMovingListFromSignature
 
-        val moveResult = newShapeMap.foldLeft(newShapeMap) { (prevMap, element) =>
-            if(element._2.state == MOVING) {
-                if(element._1._2 + 1 >= gridBound ||
-                  prevMap.exists(e => e._1 == (element._1._1, element._1._2 + 1) && e._2.color != element._2.color)
+        val moveResult = shapeList.foldLeft((List[Shape](), pixelMap)) { (prev, element) =>
+            // If the shape is moving
+            if(element.pixels.forall(p => p.state == MOVING)) {
+                // If shape contains a pixel that will be blocked on next move by another static pixel
+                if(element.pixels.exists(p => p.position._2 + 1 >= gridBound ||
+                    prev._2.exists(e => e._1 == (p.position._1, p.position._2 + 1) && e._2._2 == STATIC))
                 ) {
-                    // Pixel can't go down any further
-                    val postPixelMoveMap = prevMap.updated(element._1, element._2.copy(state = STATIC))
+                    // Shape can't go down any further
+                    val postMoveShapeList = prev._1 :+ Shape(element.pixels.map(p =>
+                        p.copy(state = STATIC))
+                    )
+                    val postMovePixelMap = element.pixels.foldLeft(prev._2) { (prevMap, pixel) =>
+                        prevMap.updated(pixel.position, (pixel.color, STATIC))
+                    }
 
                     // Full line check
-                    val postLineCheckMap = postPixelMoveMap.map(e =>
-                        if(postPixelMoveMap.count(me => me._1._2 == e._1._2) == 19) {
-                            e.copy(_2 = e._2.copy(state = MOVING))
+                    val postLineCheckMap = postMovePixelMap.map(e =>
+                        // If current pixel line is a full one
+                        // TODO : Edit this process
+                        if(postMovePixelMap.count(me => me._1._2 == e._1._2) == 19) {                            
+                            e.copy(_2 = e._2.copy(_2 = MOVING))                            
                         }
                         else {
                             e
                         }
                     )
 
-                    postLineCheckMap
+                    (postMoveShapeList, postLineCheckMap)
                 }
                 else {
                     val isLeftMoveBlocked =
-                        prevMap.exists(p =>
+                        prev._2.exists(p =>
                             p._1._1 - 1 <= 0 ||
-                              pixelMap.exists(e => e._1 == (p._1._1 - 1, p._1._2 + 1) && e._2.color != p._2.color)
+                              pixelMap.exists(e => e._1 == (p._1._1 - 1, p._1._2 + 1) && e._2._2 == STATIC)
                         )
 
                     val isRightMoveBlocked =
-                        prevMap.exists(p =>
+                        prev._2.exists(p =>
                             p._1._1 + 1 >= gridBound ||
-                              pixelMap.exists(e => e._1 == (p._1._1 + 1, p._1._2 + 1) && e._2.color != p._2.color)
+                              pixelMap.exists(e => e._1 == (p._1._1 + 1, p._1._2 + 1) && e._2._2 == STATIC)
                         )
 
                     // Moving pixel downwards and horizontally
@@ -76,79 +84,116 @@ final case class Game(signature: ShapeSignature, pixelMap: Map[(Int, Int), Pixel
                         case Direction.RIGHT => if (!isRightMoveBlocked) 1 else 0
                         case Direction.NONE => 0
 
-                    val res = prevMap.removed(element._1)
+                    val res = prev._2.removed(element._1)
                       .updated((element._1._1 + xDirection, element._1._2 + 1), element._2)
 
                     res
                 }
             }
             else {
-                prevMap
+                prev
             }
         }
 
         copy(
             signature = if (!TEST_MODE) ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)) else BAR,
-            pixelMap = moveResult
+            pixelList = moveResult._1,
+            pixelMap = moveResult._2
         )
     }
 
-    private def getNextMapWithShape(pixelMap: Map[(Int, Int), Pixel]): Map[(Int, Int), Pixel] = {
+    private def getNextMovingListFromSignature: Option[Shape] = {
         val randCoord = Coord(10, 0)
         val randColor = Color.rgb(Random.nextInt(256), Random.nextInt(256), Random.nextInt(256))
 
-        if (pixelMap.exists(e => e._2.state == MOVING)) pixelMap else signature match
+        if (pixelMap.exists(e => e._2._2 == MOVING)) None else signature match
             case SQUARE =>
-                // BL
-                pixelMap.updated((randCoord.x, randCoord.y + 1), Pixel(randColor, MOVING))
-                // TL
-                  .updated((randCoord.x, randCoord.y), Pixel(randColor, MOVING))
-                // TR
-                  .updated((randCoord.x + 1, randCoord.y), Pixel(randColor, MOVING))
-                // BR
-                  .updated((randCoord.x + 1, randCoord.y + 1), Pixel(randColor, MOVING))
+                Some(
+                    Shape(
+                        List(
+                            // BL
+                            Pixel((randCoord.x, randCoord.y + 1), randColor, MOVING),
+                            // TL
+                            Pixel((randCoord.x, randCoord.y), randColor, MOVING),
+                            // TR
+                            Pixel((randCoord.x + 1, randCoord.y), randColor, MOVING),
+                            // BR
+                            Pixel((randCoord.x + 1, randCoord.y + 1), randColor, MOVING)
+                        )
+                    )
+                )                
             case T =>
-                // TL
-                pixelMap.updated((randCoord.x - 1, randCoord.y), Pixel(randColor, MOVING))
-                // TM
-                  .updated((randCoord.x, randCoord.y), Pixel(randColor, MOVING))
-                // TR
-                  .updated((randCoord.x + 1, randCoord.y), Pixel(randColor, MOVING))
-                // M
-                  .updated((randCoord.x, randCoord.y + 1), Pixel(randColor, MOVING))
+                Some(
+                    Shape(
+                        List(
+                            // TL
+                            Pixel((randCoord.x - 1, randCoord.y), randColor, MOVING),
+                            // TM
+                            Pixel((randCoord.x, randCoord.y), randColor, MOVING),
+                            // TR
+                            Pixel((randCoord.x + 1, randCoord.y), randColor, MOVING),
+                            // M
+                            Pixel((randCoord.x, randCoord.y + 1), randColor, MOVING),
+                        )
+                    )
+                )
             case L =>
-                // TM
-                pixelMap.updated((randCoord.x, randCoord.y), Pixel(randColor, MOVING))
-                // M
-                  .updated((randCoord.x, randCoord.y + 1), Pixel(randColor, MOVING))
-                // BM
-                  .updated((randCoord.x, randCoord.y + 2), Pixel(randColor, MOVING))
-                // BR
-                  .updated((randCoord.x + 1, randCoord.y + 2), Pixel(randColor, MOVING))
+                Some(
+                    Shape(
+                        List(
+                            // TM
+                            Pixel((randCoord.x, randCoord.y), randColor, MOVING),
+                            // M
+                            Pixel((randCoord.x, randCoord.y + 1), randColor, MOVING),
+                            // BM
+                            Pixel((randCoord.x, randCoord.y + 2), randColor, MOVING),
+                            // BR
+                            Pixel((randCoord.x + 1, randCoord.y + 2), randColor, MOVING),
+                        )
+                    )
+                )
             case REVERSE_L =>
-                // TM
-                pixelMap.updated((randCoord.x, randCoord.y), Pixel(randColor, MOVING))
-                // M
-                  .updated((randCoord.x, randCoord.y + 1), Pixel(randColor, MOVING))
-                // BM
-                  .updated((randCoord.x, randCoord.y + 2), Pixel(randColor, MOVING))
-                // BL
-                  .updated((randCoord.x - 1, randCoord.y + 2), Pixel(randColor, MOVING))
-            case BAR =>
-                // TM
-                pixelMap.updated((randCoord.x, randCoord.y), Pixel(randColor, MOVING))
-                // M
-                  .updated((randCoord.x, randCoord.y + 1), Pixel(randColor, MOVING))
-                // BM
-                  .updated((randCoord.x, randCoord.y + 2), Pixel(randColor, MOVING))
+                Some(
+                    Shape(
+                        List(
+                            // TM
+                            Pixel((randCoord.x, randCoord.y), randColor, MOVING),
+                            // M
+                            Pixel((randCoord.x, randCoord.y + 1), randColor, MOVING),
+                            // BM
+                            Pixel((randCoord.x, randCoord.y + 2), randColor, MOVING),
+                            // BL
+                            Pixel((randCoord.x - 1, randCoord.y + 2), randColor, MOVING),
+                        )
+                    )
+                )
+            case BAR =>                
+                Some(
+                    Shape(
+                        List(
+                            // TM
+                            Pixel((randCoord.x, randCoord.y), randColor, MOVING),
+                            // M
+                            Pixel((randCoord.x, randCoord.y + 1), randColor, MOVING),
+                            // BM
+                            Pixel((randCoord.x, randCoord.y + 2), randColor, MOVING),
+                        )
+                    )
+                )
             case S =>
-                // T
-                pixelMap.updated((randCoord.x, randCoord.y), Pixel(randColor, MOVING))
-                // ML
-                  .updated((randCoord.x, randCoord.y + 1), Pixel(randColor, MOVING))
-                // MR
-                  .updated((randCoord.x + 1, randCoord.y + 1), Pixel(randColor, MOVING))
-                // B
-                  .updated((randCoord.x + 1, randCoord.y + 2), Pixel(randColor, MOVING))
+                Some(
+                    Shape(
+                        List(
+                            // T
+                            Pixel((randCoord.x, randCoord.y), randColor, MOVING),
+                            // ML
+                            Pixel((randCoord.x, randCoord.y + 1), randColor, MOVING),
+                            // MR
+                            Pixel((randCoord.x + 1, randCoord.y + 1), randColor, MOVING),
+                            // B
+                            Pixel((randCoord.x + 1, randCoord.y + 2), randColor, MOVING),
+                        )
+                    )
+                )
     }
 }

@@ -2,4 +2,4 @@ package app
 
 import scalafx.scene.paint.Color
 
-final case class Pixel(color: Color, state: PixelState)
+final case class Pixel(position: (Int, Int), color: Color, state: PixelState)

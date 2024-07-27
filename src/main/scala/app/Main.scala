@@ -31,6 +31,7 @@ object Main extends JFXApp3 {
         val game: ObjectProperty[Game] = ObjectProperty(Game(
             if(!TEST_MODE) ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)) else BAR,
             Map(),
+            List(),
             cellSize,
             gridBound,
             TEST_MODE
