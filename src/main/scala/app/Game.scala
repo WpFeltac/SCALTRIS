@@ -1,30 +1,44 @@
 package app
 
-import app.Main.TEST_MODE
-import app.PixelState.{MOVING, STATIC}
+import app.PixelState.{FALLING, MOVING, STATIC}
 import app.ShapeSignature.{BAR, L, REVERSE_L, S, SQUARE, T}
 import scalafx.scene.shape.Rectangle
 import scalafx.scene.paint.Color
 import scalafx.scene.paint.Color.*
 
-import scala.annotation.{static, tailrec}
+import scala.annotation.tailrec
 import scala.language.postfixOps
 import scala.util.Random
 
-final case class Game(signature: ShapeSignature, pixelMap: Map[(Int, Int), Pixel], pixelList: List[Pixel], groupId: Int, cellSize: Int, gridBound: Int, TEST_MODE: Boolean) {
+final case class Game(movingShape: Option[Shape], pixelMap: Map[(Int, Int), (PixelState, Color)], cellSize: Int, gridBound: Int, TEST_MODE: Boolean) {
     def draw(): List[Rectangle] = {
+        
+        val shapeDrawList = if(movingShape.isDefined) {            
+            movingShape.get.pixels.map(p => {
+                new Rectangle {
+                    x = p._1._1 * cellSize
+                    y = p._1._2 * cellSize
+                    width = cellSize
+                    height = cellSize
+                    fill = movingShape.get.color
+                }
+            })
+        } else {
+            List()
+        }
+        
 
-        val drawList = pixelList.map(p =>
+        val drawList = pixelMap.map(p =>
             new Rectangle {
-                x = p.position._1 * cellSize
-                y = p.position._2 * cellSize
+                x = p._1._1 * cellSize
+                y = p._1._2 * cellSize
                 width = cellSize
                 height = cellSize
-                fill = p.color
+                fill = p._2._2
             }
-        )
+        ).toList
 
-        drawList
+        (shapeDrawList ::: drawList)
           // BASE
           :+ Rectangle(0, 600, 630, 60)
           // BANDE GAUCHE
@@ -35,167 +49,233 @@ final case class Game(signature: ShapeSignature, pixelMap: Map[(Int, Int), Pixel
 
     def play(direction: Direction): Game = {
 
-        val nextShapeList = getNextMovingListFromSignature
+        val currentShape = if(movingShape.isDefined) movingShape.get else getNextShape
 
-        val moveResult = nextShapeList.foldLeft((List[Pixel](), pixelMap)) { (prev, pixel) =>
-            // If the shape is moving
-            if(pixel.state == MOVING) {
-                // If pixel will be blocked on next move by another static pixel or bound
-                if(pixel.position._2 + 1 >= gridBound ||
-                    prev._2.exists(pm => pm._2.position == (pixel.position._1, pixel.position._2 + 1) && pm._2.state == STATIC)
-                ) {
-                    // Pixel and all in its group can't go down any further
-                    val staticSetResult = setGroupStateToStatic(pixel.groupId, nextShapeList, prev._2)
+        if(isNextMoveCritical(currentShape)) {
+            val nextPixelMap = currentShape.pixels.foldLeft(pixelMap)((prevMap, p) =>
+                prevMap.updated(p.position, (STATIC, currentShape.color))
+            )
 
-                    // Full line check
-                    val postLineCheckMap = staticSetResult._2.map(e =>
-                        // If current pixel line is a full one
-                        // TODO : Edit this process
-                        if(staticSetResult._2.count(me => me._1._2 == e._1._2) == 19) {                            
-                            e.copy(_2 = e._2.copy(state = MOVING))                            
-                        }
-                        else {
-                            e
-                        }
-                    )
+            // Vérification de ligne complète + suppression et mouvement en conséquence
+            val counts = (1 to 19).map(l => nextPixelMap.count(pm => pm._1._2 == l))
+            val fullLinesIndexes = counts.zipWithIndex.filter((c, i) => c == 4).map(res => res._2 + 1)
+            val postRemoveMap = nextPixelMap.filterNot(pm => fullLinesIndexes.contains(pm._1._2))
 
-                    (staticSetResult._1, postLineCheckMap)
-                }
-                else {
-                    val isLeftMoveBlocked =
-                        prev._2.exists(p =>
-                            p._1._1 - 1 <= 0 ||
-                              pixelMap.exists(e => e._1 == (p._1._1 - 1, p._1._2 + 1) && e._2._2 == STATIC)
-                        )
+            val postDownMoveMap = fullLinesIndexes.foldLeft(postRemoveMap)((prev, li) =>
+                prev.filter(pm => pm._1._2 < li).map(pm => pm.copy(_1 = (pm._1._1, pm._1._2 + 1)))
+            )
 
-                    val isRightMoveBlocked =
-                        prev._2.exists(p =>
-                            p._1._1 + 1 >= gridBound ||
-                              pixelMap.exists(e => e._1 == (p._1._1 + 1, p._1._2 + 1) && e._2._2 == STATIC)
-                        )
-
-                    // Moving pixel downwards and horizontally
-                    val xDirection = direction match
-                        case Direction.LEFT => if (!isLeftMoveBlocked) -1 else 0
-                        case Direction.RIGHT => if (!isRightMoveBlocked) 1 else 0
-                        case Direction.NONE => 0
-                    
-                    val newList = prev._1 :+ pixel.copy(position = (pixel.position._1 + xDirection, pixel.position._2 + 1))
-                    val newMap = prev._2.removed(pixel.position)
-                      .updated(
-                          (pixel.position._1 + xDirection, pixel.position._2 + 1),
-                          pixel.copy(position = (pixel.position._1 + xDirection, pixel.position._2 + 1)
-                      )
-                    )
-
-                    (newList, newMap)
-                }
-            }
-            else {
-                prev
-            }
-        }
-
-        copy(
-            signature = if (!TEST_MODE) ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)) else BAR,
-            pixelList = moveResult._1,
-            pixelMap = moveResult._2,
-            groupId = if(nextShapeList.length > pixelList.length) groupId + 1 else groupId
-        )
-    }
-
-    private def setGroupStateToStatic(groupId: Int, recPixelList: List[Pixel], recPixelMap: Map[(Int, Int), Pixel], index: Int = 0): (List[Pixel], Map[(Int, Int), Pixel]) = {
-        if(index < recPixelList.length) {
-            val currentPixel = recPixelList(index)
-            if(currentPixel.groupId == groupId && currentPixel.state == MOVING) {
-                
-                val newList = recPixelList.filterNot(p => p == currentPixel) :+ currentPixel.copy(state = STATIC)
-                val newMap = recPixelMap.updated(currentPixel.position, currentPixel.copy(state = STATIC))
-
-                setGroupStateToStatic(groupId, newList, newMap, index + 1)
-            }
-            else {
-                setGroupStateToStatic(groupId, recPixelList, recPixelMap, index)
-            }
+            copy(
+                movingShape = None,
+                pixelMap = postDownMoveMap
+            )
         }
         else {
-            (recPixelList, recPixelMap)
+            val xDirection = direction match
+                case Direction.LEFT => if (!isLeftBlocked(currentShape)) -1 else 0
+                case Direction.RIGHT => if (!isRightBlocked(currentShape)) 1 else 0
+                case Direction.NONE => 0
+
+            copy(
+                movingShape = Some(currentShape.copy(
+                    position = (currentShape.position._1 + xDirection, currentShape.position._2 + 1),
+                    pixels = currentShape.pixels.map(p => p.copy(position = (p.position._1 + xDirection, p.position._2 + 1)))
+                )),
+            )
         }
     }
 
-    private def getNextMovingListFromSignature: List[Pixel] = {
+    private def isLeftBlocked(shape: Shape): Boolean = {
+        shape.signature match
+            case SQUARE =>
+                shape.position._1 - 1 <= 0 ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2)) ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2 + 1)) ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2 + 2))
+            case T =>
+                shape.position._1 - 1 <= 0  ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2)) ||
+                  pixelMap.contains((shape.position._1, shape.position._2 + 1)) ||
+                  pixelMap.contains((shape.position._1, shape.position._2 + 2))
+            case L | BAR =>
+                shape.position._1 - 1 <= 0 ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2)) ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2 + 1)) ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2 + 2)) ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2 + 3))
+            case REVERSE_L =>
+                shape.position._1 - 1 <= 0 ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2)) ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2 + 1)) ||
+                  pixelMap.contains((shape.position._1 - 2, shape.position._2 + 2)) ||
+                  pixelMap.contains((shape.position._1 - 2, shape.position._2 + 3))
+            case S =>
+                shape.position._1 - 1 <= 0  ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2)) ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2 + 1)) ||
+                  pixelMap.contains((shape.position._1, shape.position._2 + 2)) ||
+                  pixelMap.contains((shape.position._1, shape.position._2 + 3))
+    }
+
+    private def isRightBlocked(shape: Shape): Boolean = {
+        shape.signature match
+            case SQUARE =>
+                shape.position._1 + 2 >= gridBound ||
+                  pixelMap.contains((shape.position._1 + 2, shape.position._2)) ||
+                  pixelMap.contains((shape.position._1 + 2, shape.position._2 + 1)) ||
+                  pixelMap.contains((shape.position._1 + 2, shape.position._2 + 2))
+            case T =>
+                shape.position._1 + 3 >= gridBound ||
+                  pixelMap.contains((shape.position._1 + 3, shape.position._2)) ||
+                  pixelMap.contains((shape.position._1 + 2, shape.position._2 + 1)) ||
+                  pixelMap.contains((shape.position._1 + 2, shape.position._2 + 2))
+            case L =>
+                shape.position._1 + 2 >= gridBound ||
+                  pixelMap.contains((shape.position._1 + 1, shape.position._2)) ||
+                  pixelMap.contains((shape.position._1 + 1, shape.position._2 + 1)) ||
+                  pixelMap.contains((shape.position._1 + 2, shape.position._2 + 2)) ||
+                  pixelMap.contains((shape.position._1 + 2, shape.position._2 + 3))
+            case REVERSE_L | BAR =>
+                shape.position._1 + 1 >= gridBound ||
+                  pixelMap.contains((shape.position._1 + 1, shape.position._2)) ||
+                  pixelMap.contains((shape.position._1 + 1, shape.position._2 + 1)) ||
+                  pixelMap.contains((shape.position._1 + 1, shape.position._2 + 2)) ||
+                  pixelMap.contains((shape.position._1 + 1, shape.position._2 + 3))
+            case S =>
+                shape.position._1 + 2 >= gridBound ||
+                  pixelMap.contains((shape.position._1 + 1, shape.position._2)) ||
+                  pixelMap.contains((shape.position._1 + 2, shape.position._2 + 1)) ||
+                  pixelMap.contains((shape.position._1 + 2, shape.position._2 + 2)) ||
+                  pixelMap.contains((shape.position._1 + 2, shape.position._2 + 3))
+    }
+
+    private def isNextMoveCritical(shape: Shape): Boolean = {
+        shape.signature match
+            case SQUARE =>
+                shape.position._2 + 2 >= gridBound ||
+                  pixelMap.contains((shape.position._1, shape.position._2 + 2)) ||
+                  pixelMap.contains((shape.position._1 + 1, shape.position._2 + 2))
+            case T =>
+                shape.position._2 + 2 >= gridBound ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2 + 1)) ||
+                  pixelMap.contains((shape.position._1, shape.position._2 + 2)) ||
+                  pixelMap.contains((shape.position._1 + 1, shape.position._2 + 1))
+            case L =>
+                shape.position._2 + 3 >= gridBound ||
+                  pixelMap.contains((shape.position._1, shape.position._2 + 3)) ||
+                  pixelMap.contains((shape.position._1 + 1, shape.position._2 + 3))
+            case REVERSE_L =>
+                shape.position._2 + 3 >= gridBound ||
+                  pixelMap.contains((shape.position._1, shape.position._2 + 3)) ||
+                  pixelMap.contains((shape.position._1 - 1, shape.position._2 + 3))
+            case BAR =>
+                shape.position._2 + 3 >= gridBound ||
+                  pixelMap.contains((shape.position._1, shape.position._2 + 3))
+            case S =>
+                shape.position._2 + 3 >= gridBound ||
+                  pixelMap.contains((shape.position._1, shape.position._2 + 2)) ||
+                  pixelMap.contains((shape.position._1 + 1, shape.position._2 + 3))
+    }
+
+    private def getNextShape: Shape = {
         val randCoord = (10, 0)
         val randColor = Color.rgb(Random.nextInt(256), Random.nextInt(256), Random.nextInt(256))
+        val signature = if (!TEST_MODE) ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)) else BAR
 
-        if (pixelMap.exists(e => e._2.state == MOVING)) pixelList
-        else {
-            val newPixels = signature match
-                case SQUARE =>
+        signature match
+            case SQUARE =>
+                Shape (
+                    randCoord,
+                    signature,
+                    randColor,
                     List(
                         // BL
-                        Pixel((randCoord._1, randCoord._2 + 1), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2 + 1)),
                         // TL
-                        Pixel((randCoord._1, randCoord._2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2)),
                         // TR
-                        Pixel((randCoord._1 + 1, randCoord._2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1 + 1, randCoord._2)),
                         // BR
-                        Pixel((randCoord._1 + 1, randCoord._2 + 1), randColor, MOVING, groupId)
-                    )               
-                case T =>
+                        Pixel((randCoord._1 + 1, randCoord._2 + 1))
+                    )
+                )
+            case T =>
+                Shape(
+                    randCoord,
+                    signature,
+                    randColor,
                     List(
+                        // TM
+                        Pixel((randCoord._1, randCoord._2)),
                         // TL
-                        Pixel((randCoord._1 - 1, randCoord._2), randColor, MOVING, groupId),
-                        // TM
-                        Pixel((randCoord._1, randCoord._2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1 - 1, randCoord._2)),
                         // TR
-                        Pixel((randCoord._1 + 1, randCoord._2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1 + 1, randCoord._2)),
                         // M
-                        Pixel((randCoord._1, randCoord._2 + 1), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2 + 1)),
                     )
-                case L =>
+                )
+            case L =>
+                Shape(
+                    randCoord,
+                    signature,
+                    randColor,
                     List(
                         // TM
-                        Pixel((randCoord._1, randCoord._2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2)),
                         // M
-                        Pixel((randCoord._1, randCoord._2 + 1), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2 + 1)),
                         // BM
-                        Pixel((randCoord._1, randCoord._2 + 2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2 + 2)),
                         // BR
-                        Pixel((randCoord._1 + 1, randCoord._2 + 2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1 + 1, randCoord._2 + 2)),
                     )
-                case REVERSE_L =>
+                )
+            case REVERSE_L =>
+                Shape(
+                    randCoord,
+                    signature,
+                    randColor,
                     List(
                         // TM
-                        Pixel((randCoord._1, randCoord._2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2)),
                         // M
-                        Pixel((randCoord._1, randCoord._2 + 1), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2 + 1)),
                         // BM
-                        Pixel((randCoord._1, randCoord._2 + 2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2 + 2)),
                         // BL
-                        Pixel((randCoord._1 - 1, randCoord._2 + 2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1 - 1, randCoord._2 + 2)),
                     )
-                case BAR =>
+                )
+            case BAR =>
+                Shape(
+                    randCoord,
+                    signature,
+                    randColor,
                     List(
                         // TM
-                        Pixel((randCoord._1, randCoord._2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2)),
                         // M
-                        Pixel((randCoord._1, randCoord._2 + 1), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2 + 1)),
                         // BM
-                        Pixel((randCoord._1, randCoord._2 + 2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2 + 2)),
                     )
-                case S =>
+                )
+            case S =>
+                Shape(
+                    randCoord,
+                    signature,
+                    randColor,
                     List(
                         // T
-                        Pixel((randCoord._1, randCoord._2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2)),
                         // ML
-                        Pixel((randCoord._1, randCoord._2 + 1), randColor, MOVING, groupId),
+                        Pixel((randCoord._1, randCoord._2 + 1)),
                         // MR
-                        Pixel((randCoord._1 + 1, randCoord._2 + 1), randColor, MOVING, groupId),
+                        Pixel((randCoord._1 + 1, randCoord._2 + 1)),
                         // B
-                        Pixel((randCoord._1 + 1, randCoord._2 + 2), randColor, MOVING, groupId),
+                        Pixel((randCoord._1 + 1, randCoord._2 + 2)),
                     )
-                    
-            pixelList ::: newPixels
-        }
+                )        
     }
 }
