@@ -32,6 +32,7 @@ object Main extends JFXApp3 {
             if(!TEST_MODE) ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)) else BAR,
             Map(),
             List(),
+            1,
             cellSize,
             gridBound,
             TEST_MODE
