@@ -10,7 +10,7 @@ import scala.annotation.tailrec
 import scala.language.postfixOps
 import scala.util.Random
 
-final case class Game(movingShape: Option[Shape], pixelMap: Map[(Int, Int), (PixelState, Color)], cellSize: Int, gridBound: Int, TEST_MODE: Boolean) {
+final case class Game(movingShape: Option[Shape], pixelMap: Map[(Int, Int), (PixelState, Color)], cellSize: Int, gridBound: Int, lost: Boolean, TEST_MODE: Boolean) {
     def draw(): List[Rectangle] = {
         
         val shapeDrawList = if(movingShape.isDefined) {            
@@ -38,7 +38,11 @@ final case class Game(movingShape: Option[Shape], pixelMap: Map[(Int, Int), (Pix
             }
         ).toList
 
-        (shapeDrawList ::: drawList)
+        val drawLost = getGameOver()
+
+        val content = if(!lost) shapeDrawList ::: drawList else drawLost
+
+        content
           // BASE
           :+ Rectangle(0, 600, 630, 60)
           // BANDE GAUCHE
@@ -51,18 +55,32 @@ final case class Game(movingShape: Option[Shape], pixelMap: Map[(Int, Int), (Pix
 
         val currentShape = if(movingShape.isDefined) movingShape.get else getNextShape
 
-        if(isNextMoveCritical(currentShape)) {
+        if(currentShape.position == (10, 0) && pixelMap.contains(currentShape.position)) {
+            println("Lost")
+
+            copy (
+                pixelMap = Map(),
+                lost = true
+            )
+        }
+        else if(isNextMoveCritical(currentShape)) {
             val nextPixelMap = currentShape.pixels.foldLeft(pixelMap)((prevMap, p) =>
                 prevMap.updated(p.position, (STATIC, currentShape.color))
             )
 
             // Vérification de ligne complète + suppression et mouvement en conséquence
             val counts = (1 to 19).map(l => nextPixelMap.count(pm => pm._1._2 == l))
-            val fullLinesIndexes = counts.zipWithIndex.filter((c, i) => c == 4).map(res => res._2 + 1)
+            val fullLinesIndexes = counts.zipWithIndex.filter((c, i) => c == 19).map(res => res._2 + 1)
             val postRemoveMap = nextPixelMap.filterNot(pm => fullLinesIndexes.contains(pm._1._2))
 
             val postDownMoveMap = fullLinesIndexes.foldLeft(postRemoveMap)((prev, li) =>
-                prev.filter(pm => pm._1._2 < li).map(pm => pm.copy(_1 = (pm._1._1, pm._1._2 + 1)))
+                prev.map(pm =>
+                    if(pm._1._2 < li) {
+                        pm.copy(_1 = (pm._1._1, pm._1._2 + 1))
+                    } else {
+                        pm
+                    }
+                )
             )
 
             copy(
@@ -180,7 +198,7 @@ final case class Game(movingShape: Option[Shape], pixelMap: Map[(Int, Int), (Pix
     private def getNextShape: Shape = {
         val randCoord = (10, 0)
         val randColor = Color.rgb(Random.nextInt(256), Random.nextInt(256), Random.nextInt(256))
-        val signature = if (!TEST_MODE) ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)) else BAR
+        val signature = if (!TEST_MODE) ShapeSignature.values(Random.nextInt(ShapeSignature.values.length)) else T
 
         signature match
             case SQUARE =>
@@ -277,5 +295,242 @@ final case class Game(movingShape: Option[Shape], pixelMap: Map[(Int, Int), (Pix
                         Pixel((randCoord._1 + 1, randCoord._2 + 2)),
                     )
                 )        
+    }
+
+    private def getGameOver(): List[Rectangle] = {
+        List(
+            // G
+            new Rectangle {
+                x = 4 * cellSize
+                y = 4 * cellSize
+                width = 2 * cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 3 * cellSize
+                y = 5 * cellSize
+                width = cellSize
+                height = 3 * cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 4 * cellSize
+                y = 8 * cellSize
+                width = 2 * cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 5 * cellSize
+                y = 6 * cellSize
+                width = 2 * cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 6 * cellSize
+                y = 7 * cellSize
+                width = cellSize
+                height = cellSize
+                fill = Black
+            },
+            //A
+            new Rectangle {
+                x = 8 * cellSize
+                y = 4 * cellSize
+                width = cellSize
+                height = 5 * cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 9 * cellSize
+                y = 4 * cellSize
+                width = cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 9 * cellSize
+                y = 6 * cellSize
+                width = cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 10 * cellSize
+                y = 4 * cellSize
+                width = cellSize
+                height = 5 * cellSize
+                fill = Black
+            },
+            // M
+            new Rectangle {
+                x = 12 * cellSize
+                y = 4 * cellSize
+                width = cellSize
+                height = 5 * cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 13 * cellSize
+                y = 5 * cellSize
+                width = cellSize
+                height = 2 * cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 14 * cellSize
+                y = 4 * cellSize
+                width = cellSize
+                height = 5 * cellSize
+                fill = Black
+            },
+            // E
+            new Rectangle {
+                x = 16 * cellSize
+                y = 4 * cellSize
+                width = 3 * cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 16 * cellSize
+                y = 5 * cellSize
+                width = cellSize
+                height = 3 * cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 16 * cellSize
+                y = 8 * cellSize
+                width = 3 * cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 17 * cellSize
+                y = 6 * cellSize
+                width = cellSize
+                height = cellSize
+                fill = Black
+            },
+            // O
+            new Rectangle {
+                x = 4 * cellSize
+                y = 10 * cellSize
+                width = 2 * cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 3 * cellSize
+                y = 11 * cellSize
+                width = cellSize
+                height = 3 * cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 6 * cellSize
+                y = 11 * cellSize
+                width = cellSize
+                height = 3 * cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 4 * cellSize
+                y = 14 * cellSize
+                width = 2 * cellSize
+                height = cellSize
+                fill = Black
+            },
+            // V
+            new Rectangle {
+                x = 8 * cellSize
+                y = 10 * cellSize
+                width = cellSize
+                height = 4 * cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 9 * cellSize
+                y = 14 * cellSize
+                width = cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 10 * cellSize
+                y = 10 * cellSize
+                width = cellSize
+                height = 4 * cellSize
+                fill = Black
+            },
+            // E
+            new Rectangle {
+                x = 12 * cellSize
+                y = 10 * cellSize
+                width = 3 * cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 12 * cellSize
+                y = 11 * cellSize
+                width = cellSize
+                height = 3 * cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 12 * cellSize
+                y = 14 * cellSize
+                width = 3 * cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 13 * cellSize
+                y = 12 * cellSize
+                width = cellSize
+                height = cellSize
+                fill = Black
+            },
+            // R
+            new Rectangle {
+                x = 16 * cellSize
+                y = 10 * cellSize
+                width = cellSize
+                height = 5 * cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 17 * cellSize
+                y = 10 * cellSize
+                width = cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 17 * cellSize
+                y = 12 * cellSize
+                width = cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 18 * cellSize
+                y = 11 * cellSize
+                width = cellSize
+                height = cellSize
+                fill = Black
+            },
+            new Rectangle {
+                x = 18 * cellSize
+                y = 13 * cellSize
+                width = cellSize
+                height = 2 * cellSize
+                fill = Black
+            }
+        )
     }
 }

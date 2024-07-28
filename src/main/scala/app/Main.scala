@@ -33,6 +33,7 @@ object Main extends JFXApp3 {
             Map(),
             cellSize,
             gridBound,
+            false,
             TEST_MODE
         ))
 
